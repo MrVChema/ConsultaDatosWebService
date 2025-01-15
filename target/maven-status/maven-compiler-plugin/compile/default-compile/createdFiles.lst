@@ -1,0 +1,8 @@
+com/data/GrupoCuatroS/config/BigQueryConfig.class
+com/data/GrupoCuatroS/entity/BigQueryResulteEntity.class
+com/data/GrupoCuatroS/application/BigQueryWebServiceApplication.class
+com/example/demo/ConsultaDatosWebServiceApplication.class
+com/data/GrupoCuatroS/controller/HelloWorldController.class
+com/data/GrupoCuatroS/entity/CatalogResultEntity.class
+com/data/GrupoCuatroS/controller/BigQueryController.class
+com/data/GrupoCuatroS/service/BigQueryService.class
