@@ -4,5 +4,6 @@
 /Users/Usuario/eclipse-workspace/ConsultaDatosWebService/src/main/java/com/data/GrupoCuatroS/controller/HelloWorldController.java
 /Users/Usuario/eclipse-workspace/ConsultaDatosWebService/src/main/java/com/data/GrupoCuatroS/entity/BigQueryResulteEntity.java
 /Users/Usuario/eclipse-workspace/ConsultaDatosWebService/src/main/java/com/data/GrupoCuatroS/entity/CatalogResultEntity.java
+/Users/Usuario/eclipse-workspace/ConsultaDatosWebService/src/main/java/com/data/GrupoCuatroS/entity/ResumenViviendaResultEntity.java
 /Users/Usuario/eclipse-workspace/ConsultaDatosWebService/src/main/java/com/data/GrupoCuatroS/service/BigQueryService.java
 /Users/Usuario/eclipse-workspace/ConsultaDatosWebService/src/main/java/com/example/demo/ConsultaDatosWebServiceApplication.java
