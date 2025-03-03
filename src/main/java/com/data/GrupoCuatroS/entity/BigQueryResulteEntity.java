@@ -5,7 +5,8 @@ import jakarta.persistence.Entity;
 @Entity
 public class BigQueryResulteEntity {
 
-    private String url;
+    private String idConsulta;
+	private String url;
     private String diasPub;
     private String antiguedad;
     private Double banos;
@@ -195,6 +196,12 @@ public class BigQueryResulteEntity {
 	}
 	public void setUrl(String url) {
 		this.url = url;
+	}
+	public String getIdConsulta() {
+		return idConsulta;
+	}
+	public void setIdConsulta(String idConsulta) {
+		this.idConsulta = idConsulta;
 	}
     
 }

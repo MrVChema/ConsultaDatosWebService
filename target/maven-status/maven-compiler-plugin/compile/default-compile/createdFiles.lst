@@ -6,3 +6,4 @@ com/data/GrupoCuatroS/controller/HelloWorldController.class
 com/data/GrupoCuatroS/entity/CatalogResultEntity.class
 com/data/GrupoCuatroS/controller/BigQueryController.class
 com/data/GrupoCuatroS/service/BigQueryService.class
+com/data/GrupoCuatroS/entity/ResumenViviendaResultEntity.class
