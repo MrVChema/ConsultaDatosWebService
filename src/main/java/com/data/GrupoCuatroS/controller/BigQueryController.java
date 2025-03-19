@@ -1,11 +1,18 @@
 package com.data.GrupoCuatroS.controller;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,6 +21,7 @@ import com.data.GrupoCuatroS.entity.BigQueryResulteEntity;
 import com.data.GrupoCuatroS.entity.CatalogResultEntity;
 import com.data.GrupoCuatroS.entity.ResumenViviendaResultEntity;
 import com.data.GrupoCuatroS.service.BigQueryService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api")
@@ -212,6 +220,99 @@ public class BigQueryController {
 			e.printStackTrace();
 			return null;
 		}
+    }
+    
+    @PostMapping("/cargaMasiva1")
+    public ResponseEntity<String> recibirCarga1(@RequestBody List<Map<String, String>> datos) {
+        int countInserts = 0;
+        int countError = 0;
+        List<Map<String, String>> registrosConError = new ArrayList<>();
+
+        try {
+            // Primero ejecutamos el proceso de eliminación
+            String resultDelete = bigQueryService.procesoDelete();
+            System.out.println("Registros eliminados: " + resultDelete);
+
+            // Procesamos cada registro que ya contiene la sentencia SQL
+            for (Map<String, String> registro : datos) {
+                try {
+                    // Extraemos la sentencia SQL directamente del registro
+                    String sentenciaSQL = registro.get("sql");
+                    
+                    if (sentenciaSQL != null && !sentenciaSQL.isEmpty()) {
+                        // Enviamos la sentencia SQL al servicio
+                        String resultado = bigQueryService.procesoInsert(sentenciaSQL);
+                        
+                        if ("Ok".equals(resultado)) {
+                            countInserts++;
+                        } else {
+                            countError++;
+                            // Guardamos el registro con error para reportarlo
+                            Map<String, String> registroError = new HashMap<>(registro);
+                            registroError.put("mensajeError", resultado);
+                            registrosConError.add(registroError);
+                        }
+                    } else {
+                        countError++;
+                        Map<String, String> registroError = new HashMap<>(registro);
+                        registroError.put("mensajeError", "Sentencia SQL vacía o nula");
+                        registrosConError.add(registroError);
+                    }
+                } catch (Exception e) {
+                    countError++;
+                    // Guardamos el registro con error y su mensaje
+                    Map<String, String> registroError = new HashMap<>(registro);
+                    registroError.put("mensajeError", e.getMessage());
+                    registrosConError.add(registroError);
+                }
+            }
+
+            // Preparamos la respuesta
+            StringBuilder response = new StringBuilder();
+            response.append("Eliminacion de datos: ").append(resultDelete).append("\n");
+            response.append("Registros en archivo: ").append(datos.size()).append("\n");
+            response.append("Registros insertados correctamente: ").append(countInserts).append("\n");
+            response.append("Registros con error: ").append(countError);
+
+            // Si hay errores, podemos guardarlos para análisis posterior
+            if (!registrosConError.isEmpty()) {
+                guardarRegistrosConError(registrosConError);
+            }
+
+            return ResponseEntity.ok(response.toString());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error en carga masiva: " + e.getMessage());
+        }
+    }
+    
+    @PostMapping("/cargaMasiva2")
+    public String recibirCarga2(@RequestParam String estado) {
+		String result = bigQueryService.procesoActualizaciones(estado);
+	    System.out.println("Servicio de actualizacion: " + result);
+	
+	    return result;
+    }
+
+    /**
+     * Guarda registros con error para su posterior análisis
+     */
+    private void guardarRegistrosConError(List<Map<String, String>> registrosConError) {
+        try {
+            // Guardar en un archivo JSON con timestamp para identificación única
+            String nombreArchivo = "errores_carga_" + System.currentTimeMillis() + ".json";
+            File archivo = new File(nombreArchivo);
+            
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.writeValue(archivo, registrosConError);
+            
+            System.out.println("Registros con error guardados en: " + archivo.getAbsolutePath());
+        } catch (Exception e) {
+            System.err.println("Error al guardar registros con error: " + e.getMessage());
+        }
     }
 
 }
