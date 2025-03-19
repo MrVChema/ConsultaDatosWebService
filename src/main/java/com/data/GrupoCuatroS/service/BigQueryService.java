@@ -1,5 +1,15 @@
 package com.data.GrupoCuatroS.service;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.json.JSONObject;
+import org.springframework.stereotype.Service;
+
 import com.data.GrupoCuatroS.entity.BigQueryResulteEntity;
 import com.data.GrupoCuatroS.entity.CatalogResultEntity;
 import com.data.GrupoCuatroS.entity.ResumenViviendaResultEntity;
@@ -12,21 +22,12 @@ import com.google.cloud.bigquery.FieldValueList;
 import com.google.cloud.bigquery.QueryJobConfiguration;
 import com.google.cloud.bigquery.TableResult;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import org.json.JSONObject;
-import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.RequestParam;
-
 @Service
 public class BigQueryService {
 
     private static final String CREDENTIALS_PATH = "credentials/bigquery-credentials.json";
+    private static final int MAX_RETRY_ATTEMPTS = 3;
+    private static final long RETRY_DELAY_MS = 2000;
 
     public List<BigQueryResulteEntity> consultarConFiltros( String estado,
 												            String tipo,
@@ -1012,6 +1013,111 @@ public class BigQueryService {
 		
 		return executeQueryResumenVivienda(query);
 	}
+    
+    public String procesoDelete() {
+    	String query = "DELETE FROM `data-agregador-main.fuentes_secundarias.temp_carga_archivo` WHERE 1=1";
+    	    
+	    try {
+	        String affectedRows = executeDmlQuery(query);
+	        return "Se eliminaron " + affectedRows + " registros de la tabla temporal.";
+	    } catch (Exception e) {
+	        System.err.println("Error en procesoDelete: " + e.getMessage());
+	        return "Error al eliminar registros: " + e.getMessage();
+	    }
+    }
+    
+    public String procesoInsert(String lineaInsert) {
+        if (lineaInsert == null || lineaInsert.trim().isEmpty()) {
+            return "Error: Consulta de inserción vacía";
+        }
+
+        try {
+            // Implementamos reintentos para manejar errores transitorios
+            for (int attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+                try {
+                    String result = executeDmlQuery(lineaInsert);
+                    return result;
+                } catch (IOException | InterruptedException e) {
+                    if (attempt == MAX_RETRY_ATTEMPTS) {
+                        throw e;
+                    }
+                    
+                    // Esperar antes de reintentar
+                    System.err.println("Reintento " + attempt + " de " + MAX_RETRY_ATTEMPTS + 
+                                     " para la consulta. Error: " + e.getMessage());
+                    Thread.sleep(RETRY_DELAY_MS);
+                }
+            }
+            
+            return "Error: Máximo de reintentos alcanzado";
+        } catch (Exception e) {
+            System.err.println("Error en procesoInsert: " + e.getMessage());
+            e.printStackTrace();
+            return "Error: " + e.getMessage();
+        }
+    }
+    
+    public String procesoActualizaciones(String estado) {
+    	String query1 = "CREATE OR REPLACE TABLE `data-agregador-main.fuentes_secundarias.temp_table_corregida` AS "
+    			+ " SELECT "
+    			+ "  t.*, "
+    			+ "  e.estado AS estado_corregido "
+    			+ " FROM "
+    			+ "  `data-agregador-main.fuentes_secundarias.temp_carga_archivo` AS t "
+    			+ " LEFT JOIN "
+    			+ "  `data-agregador-main.fuentes_secundarias.temp_estados` AS e "
+    			+ " ON "
+    			+ "  upper(t.`loc-estado`) = upper(e.estado) "
+    			+ " WHERE t.`loc-estado` = '" + estado + "' ";
+    	
+    	String query2 = "UPDATE `data-agregador-main.fuentes_secundarias.temp_table_corregida` AS t "
+    			+ " SET estado_corregido = e.estado "
+    			+ " FROM "
+    			+ "  `data-agregador-main.fuentes_secundarias.temp_municipios` AS m "
+    			+ " JOIN "
+    			+ "  `data-agregador-main.fuentes_secundarias.temp_estados` AS e "
+    			+ " ON "
+    			+ "  m.idEstado = e.idEstado "
+    			+ " WHERE "
+    			+ "  upper(t.`loc-estado`) = m.municipio "
+    			+ "  AND t.estado_corregido IS NULL";
+    	
+    	String query3 = "DELETE FROM `data-agregador-main.fuentes_secundarias.temp_table_corregida` "
+    			+ " WHERE estado_corregido IS NULL";
+    	
+    	String query4 = "UPDATE `data-agregador-main.fuentes_secundarias.temp_table_corregida` "
+    			+ " SET `loc-estado` = estado_corregido "
+    			+ " WHERE 1 = 1";
+    	
+    	String query5 = "DELETE FROM `data-agregador-main.fuentes_secundarias.temp_carga_archivo` WHERE `loc-estado` !='" + estado + "'";
+    	    
+	    try {
+	    	System.err.println("----Corrio query 1----");
+	        executeDmlQuery(query1);
+	        System.err.println("----FIN query 1----");
+	        
+	        System.err.println("----Corrio query 2----");
+	        executeDmlQuery(query2);
+	        System.err.println("----FIN query 2----");
+	        
+	        System.err.println("----Corrio query 3----");
+	        executeDmlQuery(query3);
+	        System.err.println("----FIN query 3----");
+	        
+	        System.err.println("----Corrio query 4----");
+	        executeDmlQuery(query4);
+	        System.err.println("----FIN query 4----");
+	        
+	        System.err.println("----Corrio query 5----");
+	        executeDmlQuery(query5);
+	        System.err.println("----FIN query 5----");
+	        
+	        return "Ok";
+	    } catch (Exception e) {
+	        System.err.println("Error en procesoDelete: " + e.getMessage());
+	        return "Error";
+	    }
+    }
 
     private List<BigQueryResulteEntity> executeQueryBigData(String query) {
         List<BigQueryResulteEntity> results = new ArrayList<>();
@@ -1264,6 +1370,38 @@ public class BigQueryService {
         }
 
         return result;
+    }
+    
+    private String executeDmlQuery(String query) throws IOException, InterruptedException {
+        List<CatalogResultEntity> results = new ArrayList<>();
+        String resultDeleted = "Ok";
+
+        try (InputStream credentialsStream = BigQueryService.class.getClassLoader().getResourceAsStream(CREDENTIALS_PATH)) {
+            if (credentialsStream == null) {
+                throw new IOException("No se encontró el archivo de credenciales en la ruta especificada: " + CREDENTIALS_PATH);
+            }
+
+            // 1. Cargar credenciales
+            GoogleCredentials credentials = GoogleCredentials.fromStream(credentialsStream);
+
+            // 2. Configurar cliente de BigQuery
+            BigQuery bigQuery = BigQueryOptions.newBuilder()
+                    .setCredentials(credentials)
+                    .build()
+                    .getService();
+            
+            //Configurar la consulta
+            QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query).build();
+
+            // Ejecutar la consulta y procesar los resultados
+            TableResult queryResults = bigQuery.query(queryConfig);
+        } catch (Exception e) {
+            System.err.println("Error al ejecutar la consulta: " + e.getMessage());
+            e.printStackTrace();
+            resultDeleted = "ERROR";
+        }
+
+        return resultDeleted;
     }
 
     public static JSONObject convertToDynamicJson(List<String> headers, Map<String, List<String>> data) {
